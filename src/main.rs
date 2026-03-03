@@ -1,3 +1,4 @@
+use std::fmt::format;
 use rand::Rng;
 use std::thread;
 use std::time::Duration;
@@ -21,6 +22,11 @@ struct Baggage {
     baggage_id: u32,
     destination: String,
 
+}
+
+struct Terminal {
+    terminal_id: u32,
+    destination: String,
 }
 
 
@@ -106,22 +112,68 @@ fn create_counter(i: u32, rx: Arc<Mutex<mpsc::Receiver<Passanger>>>) {
         .unwrap();
 }
 
+fn create_terminal (id: u32, destination: String, rx: mpsc::Receiver<Baggage> ) {
+    let terminal_name = format!("Terminal {}", id);
+
+    println!("{} created with destination {}", terminal_name, destination);
+
+    thread::Builder::new()
+        .name(terminal_name)
+        .spawn(move || {
+            let terminal = Terminal {
+                terminal_id: id,
+                destination: destination.clone(),
+            };
+
+            loop {
+                let baggage = match rx.recv() {
+                    Ok(b) => b,
+                    Err(_) => break,
+                };
+
+                println!("{}", format!(
+                    "Terminal {} to {} recived baggage number {}",
+                    terminal.terminal_id,
+                    terminal.destination,
+                    baggage.baggage_id,
+                ));
+            }
+    })
+    .unwrap();
+}
+
 
 fn main() {
     let (tx, rx) = mpsc::channel::<Passanger>();
     let rx = Arc::new(Mutex::new(rx));
+
+    let destinations = vec![
+        (1, "Denmark"),
+        (2, "France"),
+        (3, "Iceland"),
+        (4, "Türkiye"),
+    ];
 
     //opretter 3 skranke
     for i in 1..=3 {
         create_counter(i, Arc::clone(&rx));
     }
 
+    for (id, dest) in destinations {
+        let (tx, rx) = mpsc::channel::<Baggage>();
+        create_terminal(id, dest.to_string(), rx);
+    }
+
     //opretter x passangere
-    for _ in 0..50 {
+    for _ in 0..5 {
         let new_passanger = create_passanger();
         tx.send(new_passanger).unwrap();
     }
     //giver tid til at skranke kører passangere igennem
-    thread::sleep(Duration::from_secs(45));
+    thread::sleep(Duration::from_secs(20));
 
 }
+
+
+
+
