@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::fmt::format;
 use rand::Rng;
 use std::thread;
@@ -21,7 +22,6 @@ struct FlightPlan {
 struct Baggage {
     baggage_id: u32,
     destination: String,
-
 }
 
 struct Terminal {
@@ -57,7 +57,7 @@ fn create_passanger () -> Passanger {
 
 }
 
-fn create_counter(i: u32, rx: Arc<Mutex<mpsc::Receiver<Passanger>>>) {
+fn create_counter(i: u32, rx: Arc<Mutex<mpsc::Receiver<Passanger>>>, sort_tx: mpsc::Sender<Baggage>) {
     //giver vores skrank et navn
     let counter_name = format!("Counter {}", i);
 
@@ -99,6 +99,8 @@ fn create_counter(i: u32, rx: Arc<Mutex<mpsc::Receiver<Passanger>>>) {
                     passanger.name.yellow(), passanger.passanger_id.to_string().green(), baggage.baggage_id.to_string().green(), baggage.destination.cyan(),
                 );
                 println!("{}", output3.blue());
+
+                sort_tx.send(baggage).unwrap();
 
                 //tråden randmly sover mellem 3-6s før skranken bliver ledig igen
                 let sleep_time = Duration::from_millis(rng.gen_range(3000..=6000));
@@ -142,6 +144,30 @@ fn create_terminal (id: u32, destination: String, rx: mpsc::Receiver<Baggage> ) 
     .unwrap();
 }
 
+fn sorting (rx: mpsc::Receiver<Baggage>, terminal_senders: HashMap<String, mpsc::Sender<Baggage>>) {
+    thread::Builder::new()
+        .name("Sorter".to_string())
+        .spawn(move || {
+            loop {
+                let baggage = match rx.recv() {
+                    Ok(b) => b,
+                    Err(_) => break,
+                };
+
+                println!("Baggage with id: {} has arrived at sorting", baggage.baggage_id);
+
+
+                match baggage.destination.as_str() {
+                    "Denmark" => terminal_senders["Denmark"].send(baggage).unwrap(),
+                    "France" => terminal_senders["France"].send(baggage).unwrap(),
+                    "Iceland" => terminal_senders["Iceland"].send(baggage).unwrap(),
+                    "Türkiye" => terminal_senders["Türkiye"].send(baggage).unwrap(),
+                    _ => println!("Not good :)")
+                }
+            }
+        })
+    .unwrap();
+}
 
 fn main() {
     let (tx, rx) = mpsc::channel::<Passanger>();
@@ -154,18 +180,24 @@ fn main() {
         (4, "Türkiye"),
     ];
 
-    //opretter 3 skranke
-    for i in 1..=3 {
-        create_counter(i, Arc::clone(&rx));
-    }
+    let mut terminal_senders: HashMap<String, mpsc::Sender<Baggage>> = HashMap::new();
 
     for (id, dest) in destinations {
-        let (tx, rx) = mpsc::channel::<Baggage>();
-        create_terminal(id, dest.to_string(), rx);
+        let (term_tx, term_rx) = mpsc::channel::<Baggage>();
+        terminal_senders.insert(dest.to_string(), term_tx);
+        create_terminal(id, dest.to_string(), term_rx);
+    }
+
+    let (sort_tx, sort_rx) = mpsc::channel::<Baggage>();
+    sorting(sort_rx, terminal_senders);
+
+    //opretter 3 skranke
+    for i in 1..=100 {
+        create_counter(i, Arc::clone(&rx), sort_tx.clone());
     }
 
     //opretter x passangere
-    for _ in 0..5 {
+    for _ in 0..300 {
         let new_passanger = create_passanger();
         tx.send(new_passanger).unwrap();
     }
