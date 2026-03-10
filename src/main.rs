@@ -38,12 +38,12 @@ fn create_passanger () -> Passanger {
     let first = first_name[rng.gen_range(0..first_name.len())].to_string();
     let last = last_name[rng.gen_range(0..last_name.len())].to_string();
     let passanger = Passanger {
-        passanger_id: rng.gen_range(0..=10000),
+        passanger_id: rng.gen_range(0..=9999),
         name: format!("{} {}", first, last),
         destination: destination[rng.gen_range(0..destination.len())].to_string(),
     };
 
-    thread::sleep(Duration::from_secs(1));
+    thread::sleep(Duration::from_millis(700));
     let output = format!(
         "{} has arrived, they are traveling to {} | ID: {}",
         passanger.name.yellow(),
@@ -103,7 +103,7 @@ fn create_counter(i: u32, rx: Arc<Mutex<mpsc::Receiver<Passanger>>>, sort_tx: mp
                 sort_tx.send(baggage).unwrap();
 
                 //tråden randmly sover mellem 3-6s før skranken bliver ledig igen
-                let sleep_time = Duration::from_millis(rng.gen_range(3000..=6000));
+                let sleep_time = Duration::from_millis(rng.gen_range(2500..=6000));
                 thread::sleep(sleep_time);
                 let output2 = format!(
                     "--- {} er nu ledig igen ---", my_name
@@ -192,17 +192,17 @@ fn main() {
     sorting(sort_rx, terminal_senders);
 
     //opretter 3 skranke
-    for i in 1..=100 {
+    for i in 1..=3 {
         create_counter(i, Arc::clone(&rx), sort_tx.clone());
     }
 
     //opretter x passangere
-    for _ in 0..300 {
+    for _ in 0..30 {
         let new_passanger = create_passanger();
         tx.send(new_passanger).unwrap();
     }
     //giver tid til at skranke kører passangere igennem
-    thread::sleep(Duration::from_secs(20));
+    thread::sleep(Duration::from_secs(40));
 
 }
 
